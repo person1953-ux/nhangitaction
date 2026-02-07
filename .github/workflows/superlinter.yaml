@@ -24,4 +24,19 @@ jobs:
           LOG_LEVEL: DEBUG
           RUN_FLAKE8: true
           RUN_CHECKOV: false
-          FAIL_ON_ERROR: false
+          FAIL_ON_ERROR: true   # ✅ REQUIRED to block deploy on failure
+
+  deploy-production:
+    name: Deploy to PRODUCTION
+    runs-on: ubuntu-latest
+    needs: super-lint   # 👈 ONLY runs if lint job PASSES
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to PRODUCTION folder
+        run: |
+          echo "Deploying to PRODUCTION..."
+          mkdir -p PRODUCTION
+          cp -r ./* PRODUCTION/
