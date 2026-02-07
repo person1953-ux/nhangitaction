@@ -1,6 +1,31 @@
+# =========================
+# Pylint Configuration File
+# =========================
+
 [MASTER]
+# Folders or files to be ignored by Pylint
+# Use relative paths from where you run Pylint
 ignore=tests
 
+# Python files to analyze (default is *.py)
+# You can uncomment and customize if needed
+# load-plugins=
+
 [MESSAGES CONTROL]
+# Disable specific Pylint warnings and messages
+# C0114: Missing module docstring
+# C0115: Missing class docstring
+# C0116: Missing function or method docstring
 disable=C0114,C0115,C0116
 
+[REPORTS]
+# Disable the full report at the end (optional)
+reports=no
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=100
+
+[LOGGING]
+# Allow basicConfig calls without warning
+logging-modules=logging
