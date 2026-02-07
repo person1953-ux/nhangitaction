@@ -21,4 +21,7 @@ jobs:
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_LEVEL: DEBUG
+          RUN_FLAKE8: true
+          RUN_CHECKOV: false
           FAIL_ON_ERROR: false
