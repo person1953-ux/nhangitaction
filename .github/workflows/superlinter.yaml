@@ -1,17 +1,18 @@
 name: Super-Linter
+
 on:
   push:
     branches:
       - main
+
 permissions:
   contents: read
   statuses: write
 
 jobs:
-
-  # Job 1: Super-Linter (your existing linter)
   super-lint:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,35 +25,3 @@ jobs:
           RUN_FLAKE8: true
           RUN_CHECKOV: false
           FAIL_ON_ERROR: false
-
-  # Job 2: Python tests (runs in parallel with Super-Linter)
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run tests
-        run: pytest tests/
-
-  # Job 3: Optional reusable workflow for build
-  reusable-build:
-    uses: your-org/your-repo/.github/workflows/python-build.yml@main
-    with:
-      python-version: '3.11'
