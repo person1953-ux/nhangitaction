@@ -1,4 +1,4 @@
-name: Super-Linter + SQL/PLSQL CI
+name: Super-Linter + SQL/PLSQL CI + Staging
 
 on:
   push:
@@ -31,14 +31,14 @@ jobs:
           LOG_LEVEL: DEBUG
           RUN_FLAKE8: true
           RUN_CHECKOV: false
-          FAIL_ON_ERROR: true   # ✅ Required to block deploy on failure
+          FAIL_ON_ERROR: true   # ✅ Block next jobs on failure
 
   # ===============================
   # 2️⃣ SQL/PLSQL CI Job
   # ===============================
   sql-ci:
     runs-on: ubuntu-latest
-    needs: super-lint  # 👈 Only runs if Super-Linter passes
+    needs: super-lint
     env:
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASS: ${{ secrets.DB_PASS }}
@@ -48,7 +48,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Install Python + sqlfluff
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -57,13 +56,11 @@ jobs:
       - name: Install sqlfluff
         run: pip install sqlfluff
 
-      # Lint SQL/PLSQL files
-      - name: Lint SQL/PLSQL with sqlfluff
+      - name: Lint SQL/PLSQL
         run: |
           sqlfluff lint sql/ --dialect oracle
           sqlfluff lint plsql/ --dialect oracle
 
-      # Compile PL/SQL scripts (syntax check)
       - name: Compile PL/SQL scripts
         run: |
           sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
@@ -71,7 +68,6 @@ jobs:
           EXIT;
           EOF
 
-      # Run PL/SQL Unit Tests
       - name: Run PL/SQL Unit Tests
         run: |
           sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
@@ -79,7 +75,6 @@ jobs:
           EXIT;
           EOF
 
-      # Execution Plan Checks
       - name: Check SQL Execution Plans
         run: |
           sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
@@ -90,7 +85,6 @@ jobs:
           EXIT;
           EOF
 
-      # Fail on full table scans
       - name: Fail on Full Table Scan
         run: |
           if grep -q "TABLE ACCESS FULL" plan.txt; then
@@ -99,13 +93,29 @@ jobs:
           fi
 
   # ===============================
-  # 3️⃣ Deploy Job
+  # 3️⃣ STAGING Deployment
+  # ===============================
+  deploy-staging:
+    name: Deploy to STAGING
+    runs-on: ubuntu-latest
+    needs: sql-ci
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to STAGING folder
+        run: |
+          echo "Deploying to STAGING..."
+          mkdir -p STAGING
+          rsync -av --exclude='STAGING' ./ STAGING/
+
+  # ===============================
+  # 4️⃣ PRODUCTION Deployment
   # ===============================
   deploy-production:
     name: Deploy to RELEASE
     runs-on: ubuntu-latest
-    needs: sql-ci   # 👈 Only runs if SQL/PLSQL CI passes
-
+    needs: deploy-staging   # 👈 Only runs if STAGING deployment succeeds
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
