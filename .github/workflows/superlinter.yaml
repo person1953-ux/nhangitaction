@@ -39,4 +39,6 @@ jobs:
         run: |
           echo "Deploying to RELEASE..."
           mkdir -p RELEASE
-          cp -r ./* RELEASE/
+          shopt -s extglob
+          cp -r !(RELEASE) RELEASE/
+
