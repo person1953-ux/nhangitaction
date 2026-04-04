@@ -33,8 +33,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
       - name: Run custom Python checks
-        run: |
-          python data_cleaning/example_usage.py
+        run: python python_data_cleaning_project/data_cleaning/example_usage.py
           
       - name: Run Super-Linter
         uses: super-linter/super-linter@v6
