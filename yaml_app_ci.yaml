@@ -1,5 +1,4 @@
-name: Application CI/CD (Ubuntu + Flake8 + Event-driven)
-
+name: Application CI/CD (Ubuntu + Flake8 + Event-driven + Salesforce)
 on:
   pull_request:
     paths-ignore:
@@ -22,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      # Start a local Kafka broker for integration tests
+      # Optional: Kafka for integration tests
       kafka:
         image: bitnami/kafka:latest
         ports:
@@ -34,11 +33,13 @@ jobs:
           --health-retries 5
 
     env:
-      # Optional environment variables for event-driven tests
+      # Salesforce sandbox credentials
+      SF_USER: ${{ secrets.SF_TEST_USER }}
+      SF_PASS: ${{ secrets.SF_TEST_PASS }}
+      SF_TOKEN: ${{ secrets.SF_TEST_TOKEN }}
+      # Optional Kafka / PubSub endpoints
       KAFKA_BOOTSTRAP: localhost:9092
       PUBSUB_EMULATOR_HOST: localhost:8085
-      SALESFORCE_TEST_USER: ${{ secrets.SF_TEST_USER }}
-      SALESFORCE_TEST_PASS: ${{ secrets.SF_TEST_PASS }}
 
     steps:
       - name: Checkout code
@@ -52,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install flake8 pytest kafka-python google-cloud-pubsub simple-salesforce
+          pip install flake8 pytest simple-salesforce kafka-python google-cloud-pubsub
 
       - name: Run Flake8 Linter
         run: flake8 .
@@ -62,6 +63,9 @@ jobs:
 
       - name: Run Event-driven Integration Tests
         run: pytest tests/integration/
+
+      - name: Run Salesforce Event Consumer/Producer Tests
+        run: pytest tests/integration/salesforce_events/
 
       - name: Validate Event Schemas
         run: python tests/schema_validation.py
@@ -81,7 +85,7 @@ jobs:
       - name: Deploy application to STAGING
         run: |
           echo "Deploying app to STAGING server..."
-          # Example: SSH deploy to staging
+          # Example: SSH deploy to staging server
           # ssh deploy@staging-server "bash deploy.sh"
 
   # ---------------------------
@@ -98,8 +102,5 @@ jobs:
       - name: Deploy application to PRODUCTION
         run: |
           echo "Deploying app to PRODUCTION server..."
-          # Example: SSH deploy to production
+          # Example: SSH deploy to production server
           # ssh deploy@prod-server "bash deploy.sh"
-
-
-          
