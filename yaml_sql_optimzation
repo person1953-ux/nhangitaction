@@ -1,55 +1,42 @@
-name: Super-Linter + SQL/PLSQL CI + Staging
-
+name: Super-Linter + SQL/PLSQL CI/CD
 on:
-  push:
-    branches:
-      - main
   pull_request:
     paths:
       - "sql/**/*.sql"
       - "plsql/**/*.sql"
+
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
   statuses: write
 
 jobs:
+
   # ===============================
-  # 1️⃣ Super-Linter Job
+  # 1️⃣ CI JOB (ONLY ON PR)
   # ===============================
-  super-lint:
+  ci:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
+    env:
+      DB_USER: ${{ secrets.CI_DB_USER }}
+      DB_PASS: ${{ secrets.CI_DB_PASS }}
+      DB_CONN: ${{ secrets.CI_DB_CONN }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Run Super-Linter
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LOG_LEVEL: DEBUG
-          RUN_FLAKE8: true
-          RUN_CHECKOV: false
-          FAIL_ON_ERROR: true   # ✅ Block next jobs on failure
+          FAIL_ON_ERROR: true
 
-  # ===============================
-  # 2️⃣ SQL/PLSQL CI Job
-  # ===============================
-  sql-ci:
-    runs-on: ubuntu-latest
-    needs: super-lint
-    env:
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASS: ${{ secrets.DB_PASS }}
-      DB_CONN: ${{ secrets.DB_CONN }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.x"
 
@@ -61,14 +48,14 @@ jobs:
           sqlfluff lint sql/ --dialect oracle
           sqlfluff lint plsql/ --dialect oracle
 
-      - name: Compile PL/SQL scripts
+      - name: Compile PL/SQL (CI DB)
         run: |
           sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
           @plsql/compile_all.sql
           EXIT;
           EOF
 
-      - name: Run PL/SQL Unit Tests
+      - name: Run utPLSQL Tests (CI DB)
         run: |
           sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
           @plsql/run_utplsql_tests.sql
@@ -88,40 +75,57 @@ jobs:
       - name: Fail on Full Table Scan
         run: |
           if grep -q "TABLE ACCESS FULL" plan.txt; then
-            echo "❌ Full table scan detected. Failing pipeline."
+            echo "❌ Full table scan detected."
             exit 1
           fi
 
   # ===============================
-  # 3️⃣ STAGING Deployment
+  # 2️⃣ DEPLOY TO STAGING (ONLY MAIN)
   # ===============================
   deploy-staging:
-    name: Deploy to STAGING
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: sql-ci
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    needs: ci
+    environment: staging
 
-      - name: Deploy to STAGING folder
+    env:
+      DB_USER: ${{ secrets.STAGE_DB_USER }}
+      DB_PASS: ${{ secrets.STAGE_DB_PASS }}
+      DB_CONN: ${{ secrets.STAGE_DB_CONN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to STAGING DB
         run: |
           echo "Deploying to STAGING..."
-          mkdir -p STAGING
-          rsync -av --exclude='STAGING' ./ STAGING/
+          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
+          @sql/deploy_all.sql
+          @plsql/deploy_all.sql
+          EXIT;
+          EOF
 
   # ===============================
-  # 4️⃣ PRODUCTION Deployment
+  # 3️⃣ DEPLOY TO PRODUCTION (APPROVAL)
   # ===============================
   deploy-production:
-    name: Deploy to RELEASE
     runs-on: ubuntu-latest
-    needs: deploy-staging   # 👈 Only runs if STAGING deployment succeeds
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    needs: deploy-staging
+    environment: production
 
-      - name: Deploy to RELEASE folder
+    env:
+      DB_USER: ${{ secrets.PROD_DB_USER }}
+      DB_PASS: ${{ secrets.PROD_DB_PASS }}
+      DB_CONN: ${{ secrets.PROD_DB_CONN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to PRODUCTION DB
         run: |
-          echo "Deploying to RELEASE..."
-          mkdir -p RELEASE
-          rsync -av --exclude='RELEASE' ./ RELEASE/
+          echo "Deploying to PRODUCTION..."
+          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
+          @sql/deploy_all.sql
+          @plsql/deploy_all.sql
+          EXIT;
+          EOF
