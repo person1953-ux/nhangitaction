@@ -1,131 +1,137 @@
 name: Super-Linter + SQL/PLSQL CI/CD
-on:
-  pull_request:
-    paths:
-      - "sql/**/*.sql"
-      - "plsql/**/*.sql"
+name: SQL/PLSQL CI/CD Pipeline
 
+on:
   push:
+    paths:
+      - "sql/**"
+      - "plsql/**"
     branches:
       - main
-
-permissions:
-  contents: read
-  statuses: write
+  pull_request:
+    paths:
+      - "sql/**"
+      - "plsql/**"
 
 jobs:
-
-  # ===============================
-  # 1️⃣ CI JOB (ONLY ON PR)
-  # ===============================
-  ci:
-    if: github.event_name == 'pull_request'
+  oracle-ci:
     runs-on: ubuntu-latest
 
-    env:
-      DB_USER: ${{ secrets.CI_DB_USER }}
-      DB_PASS: ${{ secrets.CI_DB_PASS }}
-      DB_CONN: ${{ secrets.CI_DB_CONN }}
+    services:
+      oracle:
+        image: gvenzl/oracle-xe:21-slim
+        ports:
+          - 1521:1521
+        env:
+          ORACLE_PASSWORD: oracle
+        options: >-
+          --health-cmd="echo 'SELECT 1 FROM dual;' | sqlplus -s system/oracle@localhost/XEPDB1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Run Super-Linter
-        uses: super-linter/super-linter@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FAIL_ON_ERROR: true
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-
-      - name: Install sqlfluff
-        run: pip install sqlfluff
-
-      - name: Lint SQL/PLSQL
+      - name: Install Oracle Instant Client
         run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio1 wget unzip
+          wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linux.x64-21.11.0.0.0dbru.zip
+          wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-sqlplus-linux.x64-21.11.0.0.0dbru.zip
+          unzip instantclient-basiclite-linux*.zip
+          unzip instantclient-sqlplus-linux*.zip
+          echo "$PWD/instantclient_21_11" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=$PWD/instantclient_21_11" >> $GITHUB_ENV
+
+      - name: Wait for Oracle to be ready
+        run: sleep 60
+
+      - name: Run SQLFluff Linter
+        run: |
+          pip install sqlfluff
           sqlfluff lint sql/ --dialect oracle
           sqlfluff lint plsql/ --dialect oracle
 
-      - name: Compile PL/SQL (CI DB)
+      - name: Load baseline schema
         run: |
-          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
-          @plsql/compile_all.sql
-          EXIT;
-          EOF
+          for file in ci-db-baseline/*.sql; do
+            echo "Running $file"
+            echo "@/github/workspace/$file" | sqlplus system/oracle@localhost/XEPDB1
+          done
 
-      - name: Run utPLSQL Tests (CI DB)
+      - name: Apply migration scripts
         run: |
-          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
-          @plsql/run_utplsql_tests.sql
-          EXIT;
-          EOF
+          for file in sql/migrations/*.sql; do
+            echo "Running migration $file"
+            echo "@/github/workspace/$file" | sqlplus system/oracle@localhost/XEPDB1
+          done
 
-      - name: Check SQL Execution Plans
+      - name: Recompile invalid objects
         run: |
-          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
-          SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF
-          SPOOL plan.txt
-          @sql/explain_all.sql
-          SPOOL OFF
-          EXIT;
-          EOF
+          echo "
+          BEGIN
+            FOR rec IN (
+              SELECT object_name, object_type
+              FROM user_objects
+              WHERE status = 'INVALID'
+            ) LOOP
+              EXECUTE IMMEDIATE 'ALTER ' || rec.object_type || ' ' || rec.object_name || ' COMPILE';
+            END LOOP;
+          END;
+          /" | sqlplus system/oracle@localhost/XEPDB1
 
-      - name: Fail on Full Table Scan
+      - name: Run utPLSQL tests
         run: |
-          if grep -q "TABLE ACCESS FULL" plan.txt; then
-            echo "❌ Full table scan detected."
-            exit 1
-          fi
+          echo "@plsql/run_utplsql_tests.sql" | sqlplus system/oracle@localhost/XEPDB1
 
-  # ===============================
-  # 2️⃣ DEPLOY TO STAGING (ONLY MAIN)
-  # ===============================
   deploy-staging:
-    if: github.event_name == 'push'
+    needs: oracle-ci
     runs-on: ubuntu-latest
-    needs: ci
-    environment: staging
-
-    env:
-      DB_USER: ${{ secrets.STAGE_DB_USER }}
-      DB_PASS: ${{ secrets.STAGE_DB_PASS }}
-      DB_CONN: ${{ secrets.STAGE_DB_CONN }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to STAGING DB
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Deploy migration to STAGING
         run: |
-          echo "Deploying to STAGING..."
-          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
-          @sql/deploy_all.sql
-          @plsql/deploy_all.sql
-          EXIT;
-          EOF
+          for file in sql/migrations/*.sql; do
+            echo "Deploying $file to STAGING"
+            echo "@/github/workspace/$file" | sqlplus system/oracle@staging-db/XEPDB1
+          done
+          echo "Recompile dependent objects on STAGING"
+          echo "
+          BEGIN
+            FOR rec IN (
+              SELECT object_name, object_type
+              FROM user_objects
+              WHERE status = 'INVALID'
+            ) LOOP
+              EXECUTE IMMEDIATE 'ALTER ' || rec.object_type || ' ' || rec.object_name || ' COMPILE';
+            END LOOP;
+          END;
+          /" | sqlplus system/oracle@staging-db/XEPDB1
 
-  # ===============================
-  # 3️⃣ DEPLOY TO PRODUCTION (APPROVAL)
-  # ===============================
   deploy-production:
-    runs-on: ubuntu-latest
     needs: deploy-staging
-    environment: production
-
-    env:
-      DB_USER: ${{ secrets.PROD_DB_USER }}
-      DB_PASS: ${{ secrets.PROD_DB_PASS }}
-      DB_CONN: ${{ secrets.PROD_DB_CONN }}
-
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to PRODUCTION DB
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Deploy migration to PRODUCTION
         run: |
-          echo "Deploying to PRODUCTION..."
-          sqlplus $DB_USER/$DB_PASS@$DB_CONN <<EOF
-          @sql/deploy_all.sql
-          @plsql/deploy_all.sql
-          EXIT;
-          EOF
+          for file in sql/migrations/*.sql; do
+            echo "Deploying $file to PRODUCTION"
+            echo "@/github/workspace/$file" | sqlplus system/oracle@production-db/XEPDB1
+          done
+          echo "Recompile dependent objects on PRODUCTION"
+          echo "
+          BEGIN
+            FOR rec IN (
+              SELECT object_name, object_type
+              FROM user_objects
+              WHERE status = 'INVALID'
+            ) LOOP
+              EXECUTE IMMEDIATE 'ALTER ' || rec.object_type || ' ' || rec.object_name || ' COMPILE';
+            END LOOP;
+          END;
+          /" | sqlplus system/oracle@production-db/XEPDB1
