@@ -1,0 +1,6 @@
+{
+  // comment
+  "name": "Alice",
+  "active": True,
+  "tags": ["a", "b",],
+}
