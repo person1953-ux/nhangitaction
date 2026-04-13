@@ -1,68 +1,28 @@
-name: Super-Linter CI/CD Pipeline
+name: Super-Linter
+
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ "main" ]
+  workflow_dispatch:
+
 permissions:
   contents: read
   statuses: write
 
 jobs:
-
-  super-lint:
-    name: Run Code Linting
+  lint:
+    name: Lint (Super-Linter)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Optional: setup Python (needed for flake8 environments)
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      # Cache dependencies to speed up workflow
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Run custom Python checks
-        run: python nhangitaction/data_cleaning/example_usage.py
-          
       - name: Run Super-Linter
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LOG_LEVEL: DEBUG
-          RUN_FLAKE8: true
-          RUN_CHECKOV: false
-          FAIL_ON_ERROR: true
-
-  deploy-production:
-    name: Deploy to RELEASE
-    runs-on: ubuntu-latest
-    needs: super-lint
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Prepare RELEASE folder
-        run: |
-          echo "Preparing RELEASE deployment..."
-          mkdir -p RELEASE
-          shopt -s extglob
-          cp -r !(RELEASE) RELEASE/
-
-      # Upload deployment artifact
-      - name: Upload RELEASE artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-build
-          path: RELEASE/
+          # Start simple; you can turn more linters on/off later
+          VALIDATE_ALL_CODEBASE: false
+          DEFAULT_BRANCH: main
+          LOG_LEVEL: INFO
