@@ -18,17 +18,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Run Super-Linter
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
           LOG_LEVEL: INFO
+
           VALIDATE_GITHUB_ACTIONS: true
           VALIDATE_YAML: true
+          VALIDATE_MARKDOWN: true
 
   test:
     name: Run Pytest
@@ -36,12 +40,20 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pytest
-      - run: pytest -q
+
+      - name: Install dependencies
+        run: |
+          pip install pytest
+
+      - name: Run tests
+        run: pytest -q
 
   docker:
     name: Build & Push to ECR
@@ -49,7 +61,8 @@ jobs:
     needs: test
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -61,21 +74,14 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push
+      - name: Build, tag, and push image
         run: |
-        ECR=177815088014.dkr.ecr.us-east-2.amazonaws.com/nhangitaction
-        ECR_REGISTRY=177815088014.dkr.ecr.us-east-2.amazonaws.com
-        ECR_REPOSITORY=nhangitaction
-        IMAGE_TAG=${{ github.sha }}
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          ECR_REGISTRY=177815088014.dkr.ecr.us-east-2.amazonaws.com
+          ECR_REPOSITORY=nhangitaction
+          IMAGE_TAG=${{ github.sha }}
 
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-
-
-
-
-        env:
-  
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
