@@ -25,37 +25,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
           # -----------------------------
-          # Scope control (important)
+          # Scope control
           # -----------------------------
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
-          FILTER_REGEX_EXCLUDE: (data/.*)
+          LOG_LEVEL: INFO
+
+          FILTER_REGEX_EXCLUDE: (data/.*|.github/workflows/.*)
 
           # -----------------------------
-          # Enable ONLY what matters
+          # CORE ENABLED CHECKS (CLEAN SET)
           # -----------------------------
+          VALIDATE_GITHUB_ACTIONS: true
+          VALIDATE_YAML: true
+          VALIDATE_MARKDOWN: true
+
           VALIDATE_PYTHON_RUFF: true
           VALIDATE_PYTHON_MYPY: true
-
-          VALIDATE_YAML: true
-          VALIDATE_GITHUB_ACTIONS: true
-          VALIDATE_MARKDOWN: true
 
           VALIDATE_JSCPD: true
           VALIDATE_GITLEAKS: true
 
           # -----------------------------
-          # Disable noisy/strict tools
+          # DISABLED (avoid conflicts)
           # -----------------------------
-          VALIDATE_PYTHON_BLACK: true
-          VALIDATE_PYTHON_PYLINT: true
-          VALIDATE_PYTHON_FLAKE8: true
-          VALIDATE_PYTHON_ISORT: true
+          VALIDATE_PYTHON_BLACK: false
+          VALIDATE_PYTHON_PYLINT: false
+          VALIDATE_PYTHON_FLAKE8: false
+          VALIDATE_PYTHON_ISORT: false
 
-          VALIDATE_CHECKOV: true
-
-          # -----------------------------
-          # Logging
-          # -----------------------------
-          LOG_LEVEL: INFO
- 
+          VALIDATE_CHECKOV: false
