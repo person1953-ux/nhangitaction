@@ -9,7 +9,8 @@ on:
 permissions:
   contents: read
   packages: write
-
+  statuses: write
+  
 jobs:
 
   lint:
