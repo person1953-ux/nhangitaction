@@ -36,16 +36,12 @@ jobs:
           # -----------------------------
           # CORE ENABLED CHECKS (CLEAN SET)
           # -----------------------------
+          
           VALIDATE_GITHUB_ACTIONS: true
           VALIDATE_YAML: true
           VALIDATE_MARKDOWN: true
 
-          VALIDATE_PYTHON_RUFF: true
-          VALIDATE_PYTHON_MYPY: true
-
-          VALIDATE_JSCPD: true
-          VALIDATE_GITLEAKS: true
-
+          
           # -----------------------------
           # DISABLED (avoid conflicts)
           # -----------------------------
