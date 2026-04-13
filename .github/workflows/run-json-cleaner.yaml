@@ -3,6 +3,7 @@ name: Run JSON cleaner
 on:
   push:
     branches: ["main"]
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -19,3 +20,6 @@ jobs:
       - name: Run cleaner on sample input
         run: |
           python scripts/clean_json.py data/messy.json /tmp/clean.json --pretty
+
+
+  
