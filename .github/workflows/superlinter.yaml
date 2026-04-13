@@ -30,7 +30,7 @@ jobs:
           RUN_PYTHON_PYLINT: false
           RUN_PYTHON_FLAKE8: false
           RUN_PYTHON_ISORT: false
-          RUN_CHECKOV: false
+          VALIDATE_CHECKOV: false
 
 
  
