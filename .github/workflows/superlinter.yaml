@@ -38,6 +38,24 @@ jobs:
           VALIDATE_GITHUB_ACTIONS: true
           VALIDATE_YAML: true
           VALIDATE_MARKDOWN: true
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t nhangitaction:latest \
+            -t nhangitaction:${{ github.sha }} \
+            .
+
   test:
     name: Run Pytest
     runs-on: ubuntu-latest
@@ -58,21 +76,3 @@ jobs:
 
       - name: Run tests
         run: pytest -q          
-jobs:
-  docker:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t nhangitaction:latest \
-            -t nhangitaction:${{ github.sha }} \
-            .
