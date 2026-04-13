@@ -6,13 +6,16 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+  packages: write
+  statuses: write
+
 jobs:
+
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: write
 
     steps:
       - uses: actions/checkout@v4
@@ -21,48 +24,32 @@ jobs:
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
           LOG_LEVEL: INFO
-
           VALIDATE_GITHUB_ACTIONS: true
           VALIDATE_YAML: true
-          VALIDATE_MARKDOWN: true
 
   test:
     name: Run Pytest
     runs-on: ubuntu-latest
     needs: lint
-    permissions:
-      contents: read
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install pytest
-
-      - name: Run tests
-        run: pytest -q
+      - run: pip install pytest
+      - run: pytest -q
 
   docker:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -72,17 +59,17 @@ jobs:
           aws-region: us-east-2
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image
-        env:
+      - name: Build and Push
+        run: |
+          ECR=177815088014.dkr.ecr.us-east-2.amazonaws.com/nhangitaction
           ECR_REGISTRY: 177815088014.dkr.ecr.us-east-2.amazonaws.com
           ECR_REPOSITORY: nhangitaction
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
-          docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t $ECR:latest .
+          docker tag $ECR:latest $ECR:${{ github.sha }}
+          docker push $ECR:latest
+          docker push $ECR:${{ github.sha }}
 
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          env:
+  
