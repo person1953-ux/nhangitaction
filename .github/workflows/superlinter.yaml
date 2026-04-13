@@ -25,3 +25,5 @@ jobs:
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
           LOG_LEVEL: INFO
+          FILTER_REGEX_EXCLUDE: (data/.*)          
+
