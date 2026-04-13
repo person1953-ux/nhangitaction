@@ -1,1 +1,3 @@
-CI/CD pipeline project using GitHub Actions + Docker + AWS ECR.
+# CI/CD Pipeline Project
+
+This project uses GitHub Actions, Docker, and AWS ECR.
