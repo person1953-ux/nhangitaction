@@ -22,7 +22,6 @@ jobs:
         uses: super-linter/super-linter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Start simple; you can turn more linters on/off later
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
           LOG_LEVEL: INFO
