@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI Pipeline - DB Governance
 
 on:
   push:
@@ -8,17 +8,15 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  statuses: write
 
 jobs:
 
   lint:
-    name: Lint Code
+    name: Code Lint (YAML / Markdown / Actions)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Run Super-Linter
@@ -34,54 +32,89 @@ jobs:
           VALIDATE_YAML: true
           VALIDATE_MARKDOWN: true
 
-  test:
-    name: Run Pytest
+          # SQL linting via SQLFluff
+          VALIDATE_SQLFLUFF: true
+
+  db-check:
+    name: SQL Governance + Dependency Check
     runs-on: ubuntu-latest
     needs: lint
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install pytest
-
-      - name: Run tests
-        run: pytest -q
-
-  docker:
-    name: Build & Push to ECR
-    runs-on: ubuntu-latest
-    needs: test
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push image
+      - name: Install tools
         run: |
-          ECR_REGISTRY=177815088014.dkr.ecr.us-east-2.amazonaws.com
-          ECR_REPOSITORY=nhangitaction
-          IMAGE_TAG=${{ github.sha }}
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pip install sqlfluff
 
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      # -----------------------------
+      # Load schema into Postgres
+      # -----------------------------
+      - name: Load schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -p 5433 -U postgres -d app_db -f sql/schema.sql
 
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      # -----------------------------
+      # Run SQLFluff (style + safety)
+      # -----------------------------
+      - name: SQLFluff Lint
+        run: sqlfluff lint sql/
+
+      # -----------------------------
+      # SQL GOVERNANCE TESTS (YOUR REQUIREMENT)
+      # -----------------------------
+      - name: Run SQL Safety Tests
+        env:
+          PGPASSWORD: postgres
+        run: |
+
+          echo "Running SQL safety tests..."
+
+          # -----------------------------
+          # TEST 1: TRUNCATE TABLE (MUST FAIL)
+          # -----------------------------
+          echo "TEST 1: TRUNCATE TABLE"
+          if grep -Ri "TRUNCATE" sql/; then
+            echo "❌ TRUNCATE TABLE is NOT allowed"
+            exit 1
+          fi
+
+          # -----------------------------
+          # TEST 2: SELECT * (MUST FAIL)
+          # -----------------------------
+          echo "TEST 2: SELECT *"
+          if grep -RiE "SELECT \*" sql/; then
+            echo "❌ SELECT * is NOT allowed (performance risk)"
+            exit 1
+          fi
+
+          echo "✅ SQL Governance Passed"
+
+      # -----------------------------
+      # OPTIONAL: Validate DB objects exist
+      # -----------------------------
+      - name: Validate DB state
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -p 5433 -U postgres -d app_db -c "\dt"
