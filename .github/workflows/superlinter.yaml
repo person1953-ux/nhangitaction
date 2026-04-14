@@ -86,29 +86,28 @@ jobs:
       - name: Run SQL Safety Tests
         env:
           PGPASSWORD: postgres
+          
         run: |
+        echo "Checking SELECT * usage..."
+        if grep -RiE "SELECT \*" sql/; then
+        echo "❌ SELECT * is not allowed"
+        exit 1
+        fi
 
-          echo "Running SQL safety tests..."
+        echo "Checking TRUNCATE usage..."
+        if grep -Ri "TRUNCATE" sql/; then
+        echo "❌ TRUNCATE TABLE is not allowed"
+        exit 1
+        fi
 
-          # -----------------------------
-          # TEST 1: TRUNCATE TABLE (MUST FAIL)
-          # -----------------------------
-          echo "TEST 1: TRUNCATE TABLE"
-          if grep -Ri "TRUNCATE" sql/; then
-            echo "❌ TRUNCATE TABLE is NOT allowed"
-            exit 1
-          fi
+        echo "Checking DROP usage..."
+        if grep -Ri "DROP TABLE" sql/; then
+          echo "❌ DROP TABLE is not allowed"
+        exit 1
+        fi
 
-          # -----------------------------
-          # TEST 2: SELECT * (MUST FAIL)
-          # -----------------------------
-          echo "TEST 2: SELECT *"
-          if grep -RiE "SELECT \*" sql/; then
-            echo "❌ SELECT * is NOT allowed (performance risk)"
-            exit 1
-          fi
-
-          echo "✅ SQL Governance Passed"
+        
+        echo "✅ SQL Governance Passed"
 
       # -----------------------------
       # OPTIONAL: Validate DB objects exist
